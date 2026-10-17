@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CRIPTA ERRANTE — Roguelike de acción</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage"><canvas id="game" width="480" height="270"></canvas></div>
+
+<div id="hud" class="hidden">
+  <div id="hud-tl">
+    <div class="bar hp"><div id="hp-fill"></div><div id="hp-shield"></div><span id="hp-text"></span></div>
+    <div id="hud-stats"><span id="gold" title="Oro"></span><span id="points" title="Puntos de habilidad (K)"></span><span id="lvl" title="Nivel"></span><span id="mode"></span></div>
+    <div id="buffs"></div>
+  </div>
+  <div id="hud-tr">
+    <canvas id="minimap" width="120" height="120"></canvas>
+    <div id="biome-name"></div>
+    <div id="coords"></div>
+  </div>
+  <div id="boss-bar" class="hidden"><div id="boss-name"></div><div class="bar boss"><div id="boss-fill"></div></div></div>
+  <div id="prompt" class="hidden"></div>
+  <div id="hotbar"></div>
+  <div id="toasts"></div>
+  <div id="hint"></div>
+</div>
+
+<div id="screen"></div>
+
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/items.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/world.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
