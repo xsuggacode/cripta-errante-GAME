@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const scr = $('screen');
   const A = {}; // acciones por data-a
-  let cur = null, sel = null, shop = null, mapScale = 2, skillTab = 'war', invMode = 'inv';
+  let cur = null, sel = null, shop = null, mapScale = 2, skillTab = 'war', invMode = 'inv', newDiff = 'normal';
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const g = () => G.game;
 
@@ -56,7 +56,7 @@
     setT('gold', '● ' + p.gold);
     setT('points', p.pts > 0 ? '★ ' + p.pts + ' (K)' : '★ 0');
     setT('lvl', 'Nv. ' + G.heroLevel(p));
-    setT('mode', gm.ws.hardcore ? '☠ HARDCORE' : '');
+    setT('mode', (gm.ws.hardcore ? '☠ HARDCORE ' : '') + (G.diffKeyOf(gm.ws) !== 'normal' ? G.diffOf(gm.ws).name : ''));
     const bf = [];
     if (p.buff.rage > 0) bf.push('Furia ' + Math.ceil(p.buff.rage));
     if (p.buff.rageP > 0) bf.push('Elixir de Furia ' + Math.ceil(p.buff.rageP));
@@ -73,7 +73,7 @@
     // jefe
     const bb = $('boss-bar');
     if (gm.boss && gm.boss.active && !gm.boss.dead) {
-      bb.classList.remove('hidden'); setT('boss-name', gm.boss.name + (gm.boss.phase === 2 ? ' — FURIA' : ''));
+      bb.classList.remove('hidden'); setT('boss-name', gm.boss.name + ' — Etapa ' + gm.boss.phase + '/' + gm.boss.nPh + (gm.boss.barrier > 0 ? ' 🛡' : '') + (gm.boss.immune > 0 ? ' (inmune)' : ''));
       $('boss-fill').style.width = Math.max(0, gm.boss.hp / gm.boss.hpMax * 100).toFixed(1) + '%';
     } else bb.classList.add('hidden');
     // aviso de interacción
@@ -121,20 +121,30 @@
       if (!s) {
         cards += '<div class="wcard empty"><div class="t">Mundo ' + (i + 1) + '</div><div class="m">Vacío.<br>Crea un mundo nuevo con generación aleatoria infinita.</div><button class="btn pri" data-a="new" data-i="' + i + '">Crear mundo</button> <button class="btn sm" data-a="import" data-i="' + i + '">Importar</button></div>';
       } else {
-        cards += '<div class="wcard"><div class="t">' + esc(s.name) + '</div><div class="m">' + (s.hardcore ? '<span class="tag hc">HARDCORE</span>' : '<span class="tag" style="color:#8fd8a0;border-color:#8fd8a0">NORMAL</span>') + '<br>Nivel ' + s.level + ' · Jefes: ' + s.bosses + '<br>Enemigos: ' + s.kills + ' · Tiempo: ' + G.fmtTime(s.play) + '<br><span style="color:#6a5f85">' + fmtDate(s.updated) + '</span></div>' +
+        cards += '<div class="wcard"><div class="t">' + esc(s.name) + '</div><div class="m">' + (s.hardcore ? '<span class="tag hc">HARDCORE</span>' : '') + '<span class="tag" style="color:' + G.DIFFS[s.diff || 'normal'].col + ';border-color:' + G.DIFFS[s.diff || 'normal'].col + '">' + G.DIFFS[s.diff || 'normal'].name.toUpperCase() + '</span><br>Nivel ' + s.level + ' · Jefes: ' + s.bosses + '<br>Enemigos: ' + s.kills + ' · Tiempo: ' + G.fmtTime(s.play) + '<br><span style="color:#6a5f85">' + fmtDate(s.updated) + '</span></div>' +
           (s.corrupt ? '' : '<button class="btn pri" data-a="cont" data-i="' + i + '">Continuar</button>') + '<button class="btn dng sm" data-a="del" data-i="' + i + '">Borrar</button><button class="btn sm" data-a="export" data-i="' + i + '">Exportar</button></div>';
       }
     }
     show('title', '<div class="panel" style="text-align:center;background:transparent;border:none;box-shadow:none"><h1>CRIPTA ERRANTE</h1><div class="sub">Roguelike de acción · mundos infinitos · tres partidas independientes</div><div class="slots">' + cards + '</div><div class="hr"></div><div class="row" style="justify-content:center"><button class="btn" data-a="controls">Controles</button><button class="btn" data-a="sound">Sonido: ' + (G.audio.on ? 'SÍ' : 'NO') + '</button></div>' + (G.Save.available() ? '' : '<div style="color:#ff8080;margin-top:8px">⚠ El navegador bloquea el almacenamiento local: no se podrá guardar.</div>') + '</div>', true);
   };
+  function diffCards() {
+    return '<div class="diffs">' + ['easy', 'normal', 'hard'].map((k) => '<div class="dcard' + (newDiff === k ? ' on' : '') + '" data-a="setdiff" data-d="' + k + '" style="--c:' + G.DIFFS[k].col + '"><b>' + G.DIFFS[k].name + '</b></div>').join('') + '</div><div class="sub" id="diff-desc" style="min-height:40px">' + G.DIFFS[newDiff].desc + '</div>';
+  }
+  A.setdiff = (d) => {
+    newDiff = d.d;
+    document.querySelectorAll('.dcard').forEach((el) => el.classList.toggle('on', el.dataset.d === newDiff));
+    const ds = $('diff-desc'); if (ds) ds.textContent = G.DIFFS[newDiff].desc;
+    const st = G.Save.settings(); st.diff = newDiff; G.Save.saveSettings(st);
+  };
   A.new = (d) => {
-    show('newworld', '<div class="panel" style="width:min(440px,94vw)"><h2>Nuevo mundo — ranura ' + (+d.i + 1) + '</h2><label>Nombre</label><input type="text" id="nw-name" maxlength="22" value="Mundo ' + (+d.i + 1) + '"><label style="display:block;margin-top:8px">Semilla (opcional, vacío = aleatoria)</label><input type="text" id="nw-seed" maxlength="24" placeholder="aleatoria"><div style="margin-top:12px"><label><input type="checkbox" id="nw-hc"> <b style="color:#ff7060">Modo Hardcore</b></label><div class="sub">La muerte borra el mundo y todo el progreso de esta ranura. Recompensa: +25% oro, +suerte y +1 punto por jefe.</div></div><div class="row" style="justify-content:flex-end"><button class="btn" data-a="title">Cancelar</button><button class="btn pri" data-a="create" data-i="' + d.i + '">Crear y jugar</button></div></div>');
+    const sv = G.Save.settings(); if (sv.diff && G.DIFFS[sv.diff]) newDiff = sv.diff;
+    show('newworld', '<div class="panel" style="width:min(440px,94vw)"><h2>Nuevo mundo — ranura ' + (+d.i + 1) + '</h2><label>Nombre</label><input type="text" id="nw-name" maxlength="22" value="Mundo ' + (+d.i + 1) + '"><label style="display:block;margin-top:8px">Semilla (opcional, vacío = aleatoria)</label><input type="text" id="nw-seed" maxlength="24" placeholder="aleatoria"><label style="display:block;margin-top:10px">Dificultad</label>' + diffCards() + '<div style="margin-top:6px"><label><input type="checkbox" id="nw-hc"> <b style="color:#ff7060">Modo Hardcore</b></label><div class="sub">La muerte borra el mundo y todo el progreso de esta ranura. Recompensa: +25% oro, +suerte y +1 punto por jefe.</div></div><div class="row stk" style="justify-content:flex-end"><button class="btn" data-a="title">Cancelar</button><button class="btn pri" data-a="create" data-i="' + d.i + '">Crear y jugar</button></div></div>');
   };
   A.create = (d) => {
     const name = ($('nw-name').value || 'Mundo').trim().slice(0, 22) || 'Mundo';
     const sd = ($('nw-seed').value || '').trim();
     const seed = sd ? (/^-?\d+$/.test(sd) ? parseInt(sd, 10) | 0 : G.strHash(sd) | 0) : (Math.random() * 4294967296) | 0;
-    G.app.newWorld(+d.i, { name, seed, hardcore: $('nw-hc').checked });
+    G.app.newWorld(+d.i, { name, seed, hardcore: $('nw-hc').checked, diff: newDiff });
   };
   A.cont = (d) => G.app.continueSlot(+d.i);
   A.del = (d) => {
@@ -167,7 +177,7 @@
   /* ---------- Pausa ---------- */
   UI.showPause = function () {
     const gm = g();
-    show('pause', '<div class="panel" style="width:min(340px,94vw);text-align:center"><h2>PAUSA</h2><div class="sub">' + esc(gm.ws.name) + (gm.ws.hardcore ? ' · HARDCORE' : '') + ' · ' + G.fmtTime(gm.ws.play) + '</div><div style="display:flex;flex-direction:column"><button class="btn pri" data-a="resume">Reanudar</button><button class="btn" data-a="inv">Inventario (I)</button><button class="btn" data-a="skills">Habilidades (K)</button><button class="btn" data-a="map">Mapa (M)</button><button class="btn" data-a="controls">Controles</button><button class="btn" data-a="sound">Sonido: ' + (G.audio.on ? 'SÍ' : 'NO') + '</button><button class="btn" data-a="unstuck">¿Atascado? Volver al último guardado</button><button class="btn dng" data-a="quit">Guardar y salir al menú</button></div></div>');
+    show('pause', '<div class="panel" style="width:min(340px,94vw);text-align:center"><h2>PAUSA</h2><div class="sub">' + esc(gm.ws.name) + ' · ' + G.diffOf(gm.ws).name + (gm.ws.hardcore ? ' · HARDCORE' : '') + ' · ' + G.fmtTime(gm.ws.play) + '</div><div style="display:flex;flex-direction:column"><button class="btn pri" data-a="resume">Reanudar</button><button class="btn" data-a="inv">Inventario (I)</button><button class="btn" data-a="skills">Habilidades (K)</button><button class="btn" data-a="map">Mapa (M)</button><button class="btn" data-a="controls">Controles</button><button class="btn" data-a="sound">Sonido: ' + (G.audio.on ? 'SÍ' : 'NO') + '</button><button class="btn" data-a="unstuck">¿Atascado? Volver al último guardado</button><button class="btn dng" data-a="quit">Guardar y salir al menú</button></div></div>');
   };
   A.pause = () => UI.showPause();
   A.resume = () => { hide(); G.app.resume(); };

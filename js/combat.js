@@ -2,7 +2,15 @@
 /* Combate en tiempo real: ataques, daño, estados, proyectiles, zonas, habilidades activas, consumibles, botín y recompensas de jefes. */
 (function () {
   const G = window.G, TS = G.TS;
+  let _targets = [];
   G.toast = function (g, msg, col) { if (G.ui && G.ui.toast) G.ui.toast(msg, col); };
+  function allTargets(g) {
+    _targets.length = 0;
+    for (let i = 0; i < g.enemies.length; i++) _targets.push(g.enemies[i]);
+    if (g.boss && g.enemies.indexOf(g.boss) < 0) _targets.push(g.boss);
+    return _targets;
+  }
+  G.allTargets = allTargets;
 
   /* ---------- Cálculo de daño del jugador ---------- */
   G.weapon = (p) => p.equip.weapon || { wt: 'fist', min: 2, max: 3, rate: 0.4, aff: {}, kind: 'weapon' };
@@ -45,10 +53,23 @@
     if (e.hp <= 0 || e.dead) return 0;
     if (e.boss && !e.active) return 0;
     const p = g.p, s = p.st;
+    // jefe inmune (cambio de etapa o en el aire durante un salto)
+    if (e.boss && e.immune > 0) {
+      if (!e.immT || g.time - e.immT > 0.5) { e.immT = g.time; G.floatText(g, e.x, e.y - e.r - 8, 'Inmune', '#9ab0d0'); }
+      return 0;
+    }
     let d = amt * e.dmgTaken;
     if (e.hp < e.hpMax * 0.3) d *= 1 + s.exec;
     if (e.boss) d *= 1 + s.bossDmg;
     d = Math.max(1, Math.round(d));
+    // escudo del jefe: absorbe el dano hasta romperse
+    if (e.boss && e.barrier > 0) {
+      const ab = Math.min(e.barrier, d);
+      e.barrier -= ab; d -= ab; e.flash = 0.06;
+      G.floatText(g, e.x + G.rand(-4, 4), e.y - e.r - 6, '🛡' + Math.round(ab), '#7ad7ff');
+      if (e.barrier <= 0) { e.barrier = 0; e.st.stun = Math.max(e.st.stun, 0.9); G.toast(g, '¡Escudo roto!', '#7ad7ff'); G.burst(g, e.x, e.y, '#7ad7ff', 24, 100, 0.6); G.sfx('boss'); }
+      if (d <= 0) return ab;
+    }
     e.hp -= d; e.flash = 0.1;
     if (e.state === 'idle') { e.state = 'chase'; e.t = 0; }
     if (!e.boss) { if (e.D.ai === 'thief') e.despawn = false; }
@@ -73,6 +94,8 @@
   };
   G.dot = function (g, e, amt, col) {
     if (e.hp <= 0) return;
+    if (e.boss && (e.immune > 0 || !e.active)) return;
+    if (e.boss && e.barrier > 0) { e.barrier = Math.max(0, e.barrier - amt); return; }
     e.hp -= amt; e.flash = Math.max(e.flash, 0.05);
     G.floatText(g, e.x + G.rand(-3, 3), e.y - e.r - 4, Math.max(1, Math.round(amt)), col, false);
     if (e.hp <= 0) G.killEnemy(g, e);
@@ -121,7 +144,7 @@
   };
   function goldDrop(g, x, y, base, tier, mul) {
     const s = g.p.st;
-    const amt = Math.max(1, Math.round(base * (1 + 0.28 * (tier - 1)) * (1 + s.gold) * (g.ws.hardcore ? 1.25 : 1) * (mul || 1)));
+    const amt = Math.max(1, Math.round(base * (1 + 0.28 * (tier - 1)) * (1 + s.gold) * (g.ws.hardcore ? 1.25 : 1) * G.diffOf(g.ws).gold * (mul || 1)));
     G.spawnDrop(g, x, y, 'gold', { amt });
   }
   G.luck = function (g) { return g.p.st.luck + (g.p.buff.clover > 0 ? 0.35 : 0) + (g.ws.hardcore ? 0.1 : 0); };
@@ -164,7 +187,7 @@
     ws.stats.bosses++;
     if (b.arenaKey) ws.done['b:' + b.arenaKey] = 1;
     g.enemies.forEach((e) => { if (e.master === b && !e.dead) { e.hp = 0; e.dead = true; G.burst(g, e.x, e.y, '#c070ff', 10, 60); } });
-    const pts = 3 + Math.min(8, ws.stats.bosses - 1) + p.st.bossPts + (ws.hardcore ? 1 : 0);
+    const pts = 3 + Math.min(8, ws.stats.bosses - 1) + p.st.bossPts + (ws.hardcore ? 1 : 0) + (G.diffKeyOf(ws) === 'hard' ? 1 : 0);
     p.pts += pts;
     const luck = G.luck(g);
     for (let i = 0; i < 3; i++) G.spawnDrop(g, b.x + G.rand(-14, 14), b.y + G.rand(-14, 14), 'item', { item: G.genGear(b.tier + 1, G.rollRarity(luck + 0.25, i === 0 ? 3 : 2)) });
@@ -221,7 +244,7 @@
       G.sfx('swing');
       const rangeBonus = w.wt === 'fist' ? 0 : 0;
       let hit = false;
-      const targets = g.enemies.concat(g.boss && g.enemies.indexOf(g.boss) < 0 ? [g.boss] : []);
+      const targets = allTargets(g);
       const hr = rollHit(g, base * s.dmg * (p.buff.rage > 0 ? 1.3 : 1) * (p.buff.rageP > 0 ? 1.4 : 1), { consumeCounter: true });
       let used = false;
       for (const e of targets) {
@@ -266,7 +289,7 @@
           if (hit || p.dodgeI > 0 || p.invuln > 0) { if (hit) dead = true; }
         }
       } else if (!dead && q.from === 'p') {
-        const targets = g.boss && g.enemies.indexOf(g.boss) < 0 ? g.enemies.concat([g.boss]) : g.enemies;
+        const targets = allTargets(g);
         for (const e of targets) {
           if (e.dead || (q.hit && q.hit.has(e))) continue;
           if (G.dist(q.x, q.y, e.x, e.y) < q.r + e.r) {
@@ -304,7 +327,7 @@
               if (f.after) { const off = Math.random() * 6.283; for (let k = 0; k < f.after.ring; k++) G.addProj(g, { x: f.x, y: f.y, vx: Math.cos(off + k / f.after.ring * 6.283) * f.after.spd, vy: Math.sin(off + k / f.after.ring * 6.283) * f.after.spd, dmg: f.after.dmg, r: 3, life: 2.2, col: f.after.col, from: 'e', src: f.src }); }
               if (f.leave) G.addZone(g, { x: f.x, y: f.y, r: f.r, life: f.leave.life, dmg: f.leave.dmg, status: f.leave.status, col: f.leave.col, src: f.src });
             } else {
-              for (const e of g.enemies.concat(g.boss && g.enemies.indexOf(g.boss) < 0 ? [g.boss] : [])) if (!e.dead && G.dist(f.x, f.y, e.x, e.y) <= f.r + e.r) G.damageEnemy(g, e, f.dmg, { kb: 120, ang: G.ang(f.x, f.y, e.x, e.y), status: f.statusO, stun: f.stun, col: f.col });
+              for (const e of allTargets(g)) if (!e.dead && G.dist(f.x, f.y, e.x, e.y) <= f.r + e.r) G.damageEnemy(g, e, f.dmg, { kb: 120, ang: G.ang(f.x, f.y, e.x, e.y), status: f.statusO, stun: f.stun, col: f.col });
               G.breakCracks(g, f.x, f.y, f.r); G.sfx('boom'); g.shake = Math.max(g.shake, 5);
               g.fx.push({ k: 'ring', x: f.x, y: f.y, r: f.r, t: 0, life: 0.3, col: f.col });
             }
@@ -315,7 +338,7 @@
           if (f.tick >= f.every) {
             f.tick -= f.every;
             if (f.owner === 'e') { if (G.dist(f.x, f.y, p.x, p.y) <= f.r) G.hurtPlayer(g, f.dmg, { src: f.src, poison: f.status === 'poison', burn: f.status === 'burn', dot: true }); }
-            else for (const e of g.enemies.concat(g.boss && g.enemies.indexOf(g.boss) < 0 ? [g.boss] : [])) if (!e.dead && G.dist(f.x, f.y, e.x, e.y) <= f.r + e.r) G.damageEnemy(g, e, f.dmg, { noLeech: false, col: f.col, status: f.statusO });
+            else for (const e of allTargets(g)) if (!e.dead && G.dist(f.x, f.y, e.x, e.y) <= f.r + e.r) G.damageEnemy(g, e, f.dmg, { noLeech: false, col: f.col, status: f.statusO });
             if (f.arrows) G.burst(g, f.x + G.rand(-f.r, f.r), f.y + G.rand(-f.r, f.r), '#e8dcb0', 3, 20, 0.3);
           }
           if (f.t >= f.life) rm = true;
@@ -340,7 +363,7 @@
   };
 
   /* ---------- Habilidades activas ---------- */
-  function targetsAll(g) { return g.enemies.concat(g.boss && g.enemies.indexOf(g.boss) < 0 ? [g.boss] : []).filter((e) => !e.dead); }
+  function targetsAll(g) { return allTargets(g).filter((e) => !e.dead); }
   function aimPoint(g, maxd) {
     const p = g.p;
     let dx = g.aimX - p.x, dy = g.aimY - p.y;

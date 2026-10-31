@@ -27,7 +27,7 @@
         if (!raw) return null;
         const d = JSON.parse(raw);
         const lvl = 1 + Object.values((d.player && d.player.skills) || {}).reduce((a, b) => a + b, 0);
-        return { name: d.name, hardcore: d.hardcore, play: d.play || 0, updated: d.updated, level: lvl, bosses: (d.stats && d.stats.bosses) || 0, kills: (d.stats && d.stats.kills) || 0, dist: (d.stats && d.stats.maxDist) || 0, seed: d.seed };
+        return { name: d.name, hardcore: d.hardcore, diff: d.diff || 'normal', play: d.play || 0, updated: d.updated, level: lvl, bosses: (d.stats && d.stats.bosses) || 0, kills: (d.stats && d.stats.kills) || 0, dist: (d.stats && d.stats.maxDist) || 0, seed: d.seed };
       } catch (e) { return { name: '(dañado)', corrupt: true, play: 0, level: 1, bosses: 0, kills: 0 }; }
     },
     serialize(ws, p) {

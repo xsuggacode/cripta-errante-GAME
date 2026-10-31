@@ -21,21 +21,24 @@
   G.tierAt = function (cx, cy) { return 1 + Math.floor(Math.hypot(cx, cy) / 5); };
 
   const roll = (seed, cx, cy) => G.hash2(seed + 5, cx, cy) / 4294967296;
-  function heavyKind(seed, cx, cy) {
+  // los umbrales de arena y mazmorra dependen de la dificultad (en normal quedan exactamente como antes)
+  function heavyKind(seed, cx, cy, D) {
     if (Math.abs(cx) <= 1 && Math.abs(cy) <= 1) return null;
     const r = roll(seed, cx, cy);
-    if (r < 0.05 && Math.hypot(cx, cy) >= 3) return 'arena';
-    if (r < 0.125) return 'dungeon';
+    const ta = 0.05 * D.arena, td = ta + 0.075 * D.dungeon;
+    if (r < ta && Math.hypot(cx, cy) >= D.arenaMin) return 'arena';
+    if (r < td) return 'dungeon';
     return null;
   }
-  G.chunkKind = function (seed, cx, cy) {
+  G.chunkKind = function (seed, cx, cy, diffKey) {
     if (cx === 0 && cy === 0) return 'camp';
-    let h = heavyKind(seed, cx, cy);
+    const D = G.DIFFS[diffKey] || G.DIFFS.normal;
+    let h = heavyKind(seed, cx, cy, D);
     if (h) {
       const me = roll(seed, cx, cy);
       for (let dy = -1; dy <= 1 && h; dy++) for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
-        if (heavyKind(seed, cx + dx, cy + dy) && roll(seed, cx + dx, cy + dy) < me) { h = null; break; }
+        if (heavyKind(seed, cx + dx, cy + dy, D) && roll(seed, cx + dx, cy + dy) < me) { h = null; break; }
       }
       if (h) return h;
     }
@@ -104,7 +107,7 @@
   /* ---------- Generación de chunk ---------- */
   P.gen = function (cx, cy) {
     const seed = this.seed, rng = G.rngFor(seed, cx, cy, 1);
-    const ch = { cx, cy, t: new Uint8Array(NN), o: new Uint8Array(NN), v: new Uint8Array(NN), kind: G.chunkKind(seed, cx, cy), ents: [], pois: [], meta: {}, lights: [], tier: G.tierAt(cx, cy), keep: [] };
+    const ch = { cx, cy, t: new Uint8Array(NN), o: new Uint8Array(NN), v: new Uint8Array(NN), kind: G.chunkKind(seed, cx, cy, this.ws.diff), ents: [], pois: [], meta: {}, lights: [], tier: G.tierAt(cx, cy), keep: [] };
     const x0 = cx * CS, y0 = cy * CS;
     const midBiome = G.biomeAt(seed, x0 + 16, y0 + 16);
     ch.biome = midBiome;
@@ -160,6 +163,7 @@
       case 'arena': genArena(S); break;
     }
     if (ch.kind !== 'dungeon' && ch.kind !== 'arena') genWild(S);
+    diffPass(S);
 
     // aplicar modificaciones persistentes (cofres abiertos, paredes rotas...)
     const mods = this.ws.mods[cx + ',' + cy];
@@ -219,7 +223,7 @@
       if (!p) continue;
       const type = G.pick(pool, rng);
       const o = Object.assign({}, opts);
-      if (!o.noElite && dist > 1.5 && rng() < Math.min(0.28, 0.05 + dist * 0.012)) o.elite = G.pick(Object.keys(G.ELITE_MODS), rng);
+      if (!o.noElite && dist > 1.5 && rng() < Math.min(0.4, (0.05 + dist * 0.012) * G.diffOf(S.L.ws).elite)) o.elite = G.pick(Object.keys(G.ELITE_MODS), rng);
       pushEnemy(S, type, p[0], p[1], o);
     }
   }
@@ -227,6 +231,34 @@
     const { ch, rng, x0, y0 } = S;
     setO(ch, x, y, O.CHEST);
     ch.meta[(x0 + x) + ',' + (y0 + y)] = Object.assign({ q: 0, mimic: rng() < 0.06 }, o);
+  }
+
+  /* ---------- ajuste por dificultad: quito o agrego enemigos con un rng aparte para no mover el resto del mapa ---------- */
+  function diffPass(S) {
+    const D = G.diffOf(S.L.ws), ch = S.ch;
+    if (ch.kind === 'camp' || ch.kind === 'arena') return;
+    const r2 = G.rngFor(S.L.seed, ch.cx, ch.cy, 31);
+    if (D.density < 1) {
+      ch.ents = ch.ents.filter((e) => e.k !== 'enemy' || e.guard || r2() < D.density);
+      return;
+    }
+    if (D.density === 1) return;
+    const near = Math.abs(ch.cx) <= 1 && Math.abs(ch.cy) <= 1;
+    const S2 = { ch, rng: r2, x0: S.x0, y0: S.y0, L: S.L };
+    const dist = Math.hypot(ch.cx, ch.cy);
+    let pool;
+    if (ch.kind === 'dungeon') pool = G.DUNGEON_ENEMIES;
+    else { const cm = G.caveMask(S.L.seed, S.x0 + 16, S.y0 + 16); pool = cm > 0.6 && dist > 1.6 ? G.CAVE_ENEMIES : G.BIOMES[ch.biome].enemies; }
+    // en vez de solo sumar grupos, tambien engordo los que ya hay con la densidad
+    let groups = D.extraGroups + (r2() < (D.density - 1) % 1 ? 1 : 0) + (D.density >= 2 ? 1 : 0);
+    if (near) groups = 1;
+    for (let g = 0; g < groups; g++) {
+      const sp = freeSpot(S2, 24);
+      if (!sp) continue;
+      if (near && Math.hypot(sp[0] - 16, sp[1] - 16) < 10) continue;
+      const n = 2 + Math.floor(r2() * 3) + D.groupSize;
+      addGroup(S2, near ? 2 : n, pool, sp[0], sp[1], 6, {});
+    }
   }
 
   /* ---------- Contenido salvaje (enemigos, cofres, zonas especiales) ---------- */
@@ -493,9 +525,9 @@
   }
 
   /* ---------- Fábrica de estado de mundo ---------- */
-  G.newWorldState = function (name, seed, hardcore) {
+  G.newWorldState = function (name, seed, hardcore, diff) {
     return {
-      v: 1, name, seed, hardcore: !!hardcore, created: Date.now(), updated: Date.now(), play: 0,
+      v: 1, name, seed, hardcore: !!hardcore, diff: G.DIFFS[diff] ? diff : 'normal', created: Date.now(), updated: Date.now(), play: 0,
       mods: {}, meta: {}, dead: {}, done: {}, epoch: 0, explored: {},
       save: { x: 16 * TS + 8, y: 18 * TS },
       stats: { kills: 0, bosses: 0, deaths: 0, chests: 0, maxDist: 0, secrets: 0 },

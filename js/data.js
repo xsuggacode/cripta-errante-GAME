@@ -70,29 +70,38 @@
   };
 
   /* ---------- Jefes ---------- */
-  // pats: patrones base. p2: patrones adicionales en fase 2 (<50% vida).
+  // pats: patrones de la etapa 1. p2: se suman en la etapa 2 (<66% vida). p3: se suman en la etapa 3 (<33%).
+  // padds: oleada de enemigos que aparece al cambiar de etapa (el jefe es inmune unos segundos mientras tanto).
+  // en dificultad facil solo hay 2 etapas (corte en 50%) y no se usa p3.
   G.BOSSES = {
-    slimeking: { name: 'Rey Slime', shape: 'slime', pal: ['#5ac85a', '#9af09a', '#2f8a3a', '#1b1424'], scale: 3.2, hp: 300, dmg: 10, spd: 26, r: 13, cd: 1.5, decor: 'crown',
+    slimeking: { name: 'Rey Slime', shape: 'slime', pal: ['#5ac85a', '#9af09a', '#2f8a3a', '#1b1424'], scale: 3.2, hp: 300, dmg: 10, spd: 28, r: 13, cd: 1.5, decor: 'crown', padds: { id: 'slime', n: 4 },
       pats: [{ k: 'slam', w: 0.7, r: 34, ring: 8 }, { k: 'aimed', w: 0.6, n: 3, spread: 0.45, spd: 115, bursts: 2, gap: 0.35 }, { k: 'summon', w: 0.8, id: 'slime', n: 3 }],
-      p2: [{ k: 'ring', w: 0.7, n: 14, rings: 2, gap: 0.45, spd: 85 }, { k: 'charge', w: 0.8, spd: 190, dur: 0.6 }] },
-    treant: { name: 'Ancestro Verdeante', shape: 'treant', pal: ['#3f9a3f', '#7a4f2a', '#2b6a2b', '#ffdd55'], scale: 3.2, hp: 380, dmg: 12, spd: 20, r: 13, cd: 1.6, decor: 'branches',
+      p2: [{ k: 'ring', w: 0.7, n: 14, rings: 2, gap: 0.45, spd: 85 }, { k: 'charge', w: 0.8, spd: 190, dur: 0.6 }, { k: 'leap', w: 0.9, r: 38, ring: 8 }],
+      p3: [{ k: 'leap', w: 1, r: 44, ring: 12, n: 2 }, { k: 'wall', w: 0.8, n: 15, gaps: 1, gw: 4, spd: 75, waves: 2, col: '#7af07a' }, { k: 'pool', w: 0.7, n: 4, r: 26 }, { k: 'charge', w: 0.8, spd: 200, dur: 0.55, n: 2 }] },
+    treant: { name: 'Ancestro Verdeante', shape: 'treant', pal: ['#3f9a3f', '#7a4f2a', '#2b6a2b', '#ffdd55'], scale: 3.2, hp: 380, dmg: 12, spd: 22, r: 13, cd: 1.6, decor: 'branches', padds: { id: 'spider', n: 4 },
       pats: [{ k: 'roots', w: 0.8, n: 9, step: 18 }, { k: 'spiral', w: 0.7, arms: 2, dur: 2.6, rate: 0.09, spd: 80, col: '#7adf5a' }, { k: 'summon', w: 0.9, id: 'spider', n: 3 }],
-      p2: [{ k: 'slam', w: 0.7, r: 42, ring: 10 }, { k: 'rain', w: 0.7, n: 7, r: 18, delay: 0.9, col: '#6adf4a' }] },
-    pharaoh: { name: 'Faraón de Arena', shape: 'skel', pal: ['#e8d8a0', '#c8a840', '#7a5a20', '#40e0ff'], scale: 3.2, hp: 340, dmg: 12, spd: 30, r: 12, cd: 1.4, decor: 'headdress',
+      p2: [{ k: 'slam', w: 0.7, r: 42, ring: 10 }, { k: 'rain', w: 0.7, n: 7, r: 18, delay: 0.9, col: '#6adf4a' }, { k: 'star', w: 0.9, arms: 6, len: 7, step: 20, col: '#7adf5a' }],
+      p3: [{ k: 'vortex', w: 1, dur: 2.1, pull: 70, r: 46, ring: 10, col: '#7adf5a' }, { k: 'wall', w: 0.8, n: 15, gaps: 1, gw: 4, spd: 70, waves: 2, col: '#7adf5a' }, { k: 'roots', w: 0.8, n: 14, step: 16 }, { k: 'barrier', w: 0.7, pct: 0.1 }] },
+    pharaoh: { name: 'Faraón de Arena', shape: 'skel', pal: ['#e8d8a0', '#c8a840', '#7a5a20', '#40e0ff'], scale: 3.2, hp: 340, dmg: 12, spd: 32, r: 12, cd: 1.4, decor: 'headdress', padds: { id: 'scorpion', n: 4 },
       pats: [{ k: 'rain', w: 0.6, n: 6, r: 20, delay: 0.9, col: '#e8c070' }, { k: 'charge', w: 0.8, spd: 210, dur: 0.55 }, { k: 'aimed', w: 0.6, n: 5, spread: 0.9, spd: 120, col: '#ffd24a' }, { k: 'summon', w: 0.8, id: 'scorpion', n: 3 }],
-      p2: [{ k: 'spiral', w: 0.7, arms: 3, dur: 2.4, rate: 0.1, spd: 85, col: '#ffd24a' }, { k: 'blink', w: 0.6 }] },
-    frostqueen: { name: 'Reina de Escarcha', shape: 'robe', pal: ['#bfe8ff', '#ffffff', '#5aa0d0', '#80f0ff'], scale: 3.2, hp: 360, dmg: 12, spd: 30, r: 12, cd: 1.3, decor: 'icecrown',
+      p2: [{ k: 'spiral', w: 0.7, arms: 3, dur: 2.4, rate: 0.1, spd: 85, col: '#ffd24a' }, { k: 'blink', w: 0.6 }, { k: 'beam', w: 0.9, dur: 2.2, sweep: 1.5, arms: 1, col: '#ffd24a' }],
+      p3: [{ k: 'beam', w: 1, dur: 2.6, sweep: 2.2, arms: 2, col: '#ffd24a' }, { k: 'vortex', w: 0.9, dur: 2.2, pull: 75, r: 46, ring: 12, col: '#e8c070' }, { k: 'wall', w: 0.8, n: 15, gaps: 1, gw: 4, spd: 80, waves: 2, col: '#ffd24a' }, { k: 'summon', w: 0.7, id: 'skeleton', n: 3, elite: true }] },
+    frostqueen: { name: 'Reina de Escarcha', shape: 'robe', pal: ['#bfe8ff', '#ffffff', '#5aa0d0', '#80f0ff'], scale: 3.2, hp: 360, dmg: 12, spd: 32, r: 12, cd: 1.3, decor: 'icecrown', padds: { id: 'wolf', n: 4 },
       pats: [{ k: 'blink', w: 0.6 }, { k: 'ring', w: 0.7, n: 16, rings: 2, gap: 0.5, spd: 90, col: '#9ae0ff' }, { k: 'spiral', w: 0.6, arms: 2, dur: 2.8, rate: 0.08, spd: 85, col: '#bff0ff' }, { k: 'rain', w: 0.7, n: 7, r: 16, delay: 0.85, col: '#9ae0ff' }],
-      p2: [{ k: 'summon', w: 0.8, id: 'wolf', n: 3 }, { k: 'aimed', w: 0.6, n: 7, spread: 1.1, spd: 130, col: '#9ae0ff' }] },
-    hydra: { name: 'Hidra del Pantano', shape: 'bog', pal: ['#4a7a2a', '#8aba4a', '#2a4a1a', '#ffe040'], scale: 3.4, hp: 420, dmg: 13, spd: 22, r: 13, cd: 1.4, decor: 'heads',
+      p2: [{ k: 'summon', w: 0.8, id: 'wolf', n: 3 }, { k: 'aimed', w: 0.6, n: 7, spread: 1.1, spd: 130, col: '#9ae0ff' }, { k: 'star', w: 0.9, arms: 8, len: 7, step: 20, col: '#9ae0ff' }],
+      p3: [{ k: 'beam', w: 1, dur: 2.4, sweep: 1.8, arms: 2, col: '#9ae0ff' }, { k: 'wall', w: 0.9, n: 17, gaps: 2, gw: 3, spd: 80, waves: 3, col: '#9ae0ff' }, { k: 'barrier', w: 0.7, pct: 0.12 }, { k: 'vortex', w: 0.9, dur: 2.0, pull: 70, r: 50, ring: 14, col: '#bff0ff' }] },
+    hydra: { name: 'Hidra del Pantano', shape: 'bog', pal: ['#4a7a2a', '#8aba4a', '#2a4a1a', '#ffe040'], scale: 3.4, hp: 420, dmg: 13, spd: 24, r: 13, cd: 1.4, decor: 'heads', padds: { id: 'bog', n: 3 },
       pats: [{ k: 'aimed', w: 0.6, n: 3, spread: 0.5, spd: 120, bursts: 3, gap: 0.4, col: '#8bd04a' }, { k: 'pool', w: 0.7, n: 3, r: 24 }, { k: 'slam', w: 0.7, r: 36, ring: 8 }],
-      p2: [{ k: 'spiral', w: 0.7, arms: 3, dur: 2.6, rate: 0.1, spd: 80, col: '#8bd04a' }, { k: 'ring', w: 0.7, n: 16, rings: 2, gap: 0.45, spd: 85, col: '#8bd04a' }] },
-    magmagolem: { name: 'Gólem de Magma', shape: 'golem', pal: ['#6a3a2a', '#a0502a', '#3a1a1a', '#ffb030'], scale: 3.4, hp: 480, dmg: 14, spd: 24, r: 13, cd: 1.4, decor: 'flames',
+      p2: [{ k: 'spiral', w: 0.7, arms: 3, dur: 2.6, rate: 0.1, spd: 80, col: '#8bd04a' }, { k: 'ring', w: 0.7, n: 16, rings: 2, gap: 0.45, spd: 85, col: '#8bd04a' }, { k: 'beam', w: 0.9, dur: 2.0, sweep: 1.4, arms: 1, col: '#8bd04a' }],
+      p3: [{ k: 'leap', w: 1, r: 42, ring: 12, n: 2, col: '#8bd04a' }, { k: 'star', w: 0.9, arms: 6, len: 8, step: 20, col: '#8bd04a' }, { k: 'wall', w: 0.8, n: 15, gaps: 1, gw: 4, spd: 80, waves: 2, col: '#8bd04a' }, { k: 'summon', w: 0.7, id: 'bog', n: 2, elite: true }] },
+    magmagolem: { name: 'Gólem de Magma', shape: 'golem', pal: ['#6a3a2a', '#a0502a', '#3a1a1a', '#ffb030'], scale: 3.4, hp: 480, dmg: 14, spd: 26, r: 13, cd: 1.4, decor: 'flames', padds: { id: 'imp', n: 4 },
       pats: [{ k: 'charge', w: 0.9, spd: 200, dur: 0.6 }, { k: 'rain', w: 0.6, n: 8, r: 20, delay: 0.85, col: '#ff6a2a' }, { k: 'slam', w: 0.8, r: 46, ring: 12, col: '#ff7a30' }, { k: 'ring', w: 0.6, n: 12, rings: 2, gap: 0.5, spd: 90, col: '#ff7a30' }],
-      p2: [{ k: 'spiral', w: 0.7, arms: 3, dur: 2.6, rate: 0.09, spd: 85, col: '#ff7a30' }, { k: 'summon', w: 0.8, id: 'imp', n: 3 }] },
-    lich: { name: 'Liche del Vacío', shape: 'robe', pal: ['#000', '#c070ff', '#4a2a7a', '#e040ff'], scale: 3.4, hp: 560, dmg: 15, spd: 32, r: 12, cd: 1.1, decor: 'skullcrown',
+      p2: [{ k: 'spiral', w: 0.7, arms: 3, dur: 2.6, rate: 0.09, spd: 85, col: '#ff7a30' }, { k: 'summon', w: 0.8, id: 'imp', n: 3 }, { k: 'leap', w: 0.9, r: 48, ring: 12, col: '#ff7a30' }],
+      p3: [{ k: 'charge', w: 1, spd: 215, dur: 0.55, n: 3 }, { k: 'vortex', w: 0.9, dur: 2.1, pull: 75, r: 52, ring: 14, col: '#ff7a30' }, { k: 'beam', w: 1, dur: 2.6, sweep: 2.0, arms: 2, col: '#ff8a3a' }, { k: 'star', w: 0.9, arms: 8, len: 8, step: 20, col: '#ff7a30' }] },
+    lich: { name: 'Liche del Vacío', shape: 'robe', pal: ['#000', '#c070ff', '#4a2a7a', '#e040ff'], scale: 3.4, hp: 560, dmg: 15, spd: 34, r: 12, cd: 1.1, decor: 'skullcrown', padds: { id: 'ghost', n: 4 },
       pats: [{ k: 'blink', w: 0.5 }, { k: 'spiral', w: 0.6, arms: 3, dur: 2.6, rate: 0.08, spd: 90, col: '#d070ff' }, { k: 'summon', w: 0.8, id: 'ghost', n: 3 }, { k: 'rain', w: 0.6, n: 8, r: 18, delay: 0.8, col: '#c040ff' }, { k: 'ring', w: 0.6, n: 18, rings: 2, gap: 0.45, spd: 95, col: '#d070ff' }],
-      p2: [{ k: 'aimed', w: 0.5, n: 9, spread: 1.3, spd: 140, col: '#e040ff' }, { k: 'slam', w: 0.7, r: 44, ring: 14, col: '#c040ff' }] },
+      p2: [{ k: 'aimed', w: 0.5, n: 9, spread: 1.3, spd: 140, col: '#e040ff' }, { k: 'slam', w: 0.7, r: 44, ring: 14, col: '#c040ff' }, { k: 'wall', w: 0.9, n: 17, gaps: 1, gw: 4, spd: 85, waves: 2, col: '#d070ff' }, { k: 'beam', w: 0.9, dur: 2.2, sweep: 1.6, arms: 1, col: '#e040ff' }],
+      p3: [{ k: 'vortex', w: 1, dur: 2.2, pull: 80, r: 52, ring: 16, col: '#d070ff' }, { k: 'star', w: 1, arms: 8, len: 8, step: 20, col: '#d070ff' }, { k: 'summon', w: 0.7, id: 'ghost', n: 3, elite: true }, { k: 'barrier', w: 0.7, pct: 0.12 }, { k: 'leap', w: 0.9, r: 46, ring: 14, n: 2, col: '#c040ff' }, { k: 'beam', w: 1, dur: 2.8, sweep: 2.4, arms: 2, col: '#e040ff' }] },
   };
 
   /* ---------- Rarezas y armas ---------- */

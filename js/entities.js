@@ -38,8 +38,9 @@
   /* ---------- Fábrica ---------- */
   G.makeEnemy = function (type, tier, x, y, elite, mini) {
     const D = G.ENEMIES[type];
-    const hs = 1 + 0.3 * (tier - 1), ds = 1 + 0.18 * (tier - 1);
-    const e = { k: 'enemy', type, D, x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: D.hp * hs, hpMax: D.hp * hs, dmg: D.dmg * ds, spd: D.spd, r: D.r, fly: !!D.fly, state: 'idle', t: Math.random() * 1.5, cd: 0.6 + Math.random() * 1.2, face: 1,
+    const Df = G.diff();
+    const hs = (1 + Df.slopeHp * (tier - 1)) * Df.hp, ds = (1 + Df.slopeDmg * (tier - 1)) * Df.dmg;
+    const e = { k: 'enemy', type, D, x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: D.hp * hs, hpMax: D.hp * hs, dmg: D.dmg * ds, spd: D.spd * (Df.key === 'hard' ? 1.1 : Df.key === 'easy' ? 0.9 : 1), r: D.r, fly: !!D.fly, state: 'idle', t: Math.random() * 1.5, cd: 0.6 + Math.random() * 1.2, face: 1,
       flash: 0, st: { burn: 0, poison: 0, slow: 0, stun: 0, bt: 0, pt: 0 }, tier, elite: elite || null, aggro: D.aggro || 110, contactCd: 0, anim: Math.random() * 6, stuck: 0, wander: Math.random() * 6.283, home: { x, y }, dmgTaken: 1, mini: !!mini, alpha: 1 };
     if (elite) {
       e.hp *= 2.3; e.hpMax = e.hp; e.dmg *= 1.3; e.r *= 1.2; e.aggro += 40;
@@ -50,11 +51,14 @@
     e.scale = (elite ? 1.2 : 1) * (mini ? 0.7 : 1);
     return e;
   };
+  // multiplicadores base de los jefes: antes se mataban casi sin pelear, ahora hay que subir de nivel o dominar la mecanica
+  const BOSS_HP_BASE = 1.9, BOSS_DMG_BASE = 1.05;
   G.makeBoss = function (type, tier, x, y) {
-    const B = G.BOSSES[type];
-    const hs = 1 + 0.42 * (tier - 1), ds = 1 + 0.2 * (tier - 1);
-    return { k: 'boss', boss: true, type, B, name: B.name, x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: B.hp * hs, hpMax: B.hp * hs, dmg: B.dmg * ds, spd: B.spd, r: B.r, fly: false, state: 'idle', t: 0, cd: 1.5, face: 1, flash: 0,
-      st: { burn: 0, poison: 0, slow: 0, stun: 0, bt: 0, pt: 0 }, tier, elite: null, active: false, phase: 1, cur: null, last: null, contactCd: 0, anim: 0, dmgTaken: 1, alpha: 1, scale: B.scale, minions: [], home: { x, y } };
+    const B = G.BOSSES[type], Df = G.diff();
+    const hs = (1 + 0.42 * (tier - 1)) * BOSS_HP_BASE * Df.bossHp, ds = (1 + 0.2 * (tier - 1)) * BOSS_DMG_BASE * Df.bossDmg;
+    return { k: 'boss', boss: true, type, B, name: B.name, x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: B.hp * hs, hpMax: B.hp * hs, dmg: B.dmg * ds, spd: B.spd * Df.bossSpd, baseSpd: B.spd * Df.bossSpd, r: B.r, fly: false, state: 'idle', t: 0, cd: 1.5, face: 1, flash: 0,
+      st: { burn: 0, poison: 0, slow: 0, stun: 0, bt: 0, pt: 0 }, tier, elite: null, active: false, phase: 1, nPh: Df.bossPhases, cur: null, last: null, contactCd: 0, anim: 0, dmgTaken: 1, alpha: 1, scale: B.scale, minions: [], home: { x, y },
+      immune: 0, barrier: 0, barrierMax: 0, fightT: 0, enrage: 0, enrageT: 0, hz: 2.5, trans: 0, cn: 0, beam: 0, baseDmg: B.dmg * ds };
   };
   G.NPCS = {
     merchant: { name: 'Mercader', pal: ['#8a5a2a', '#e8b878', '#2a6a4a', '#1b1424'], shape: 'robe' },
@@ -211,50 +215,128 @@
   };
 
   /* ---------- Jefes ---------- */
+  // etapas: 3 en normal/dificil (cortes en 66% y 33%), 2 en facil (corte en 50%)
+  const PH_SPD = [1, 1.18, 1.35], PH_CD = [1, 0.85, 0.68];
+  function phaseCuts(b) { return b.nPh >= 3 ? [0.66, 0.33] : [0.5]; }
   function choosePat(b) {
     const B = b.B;
-    const pool = b.phase === 2 ? B.pats.concat(B.p2, B.p2) : B.pats;
-    const opts = pool.filter((x) => x !== b.lastDef);
+    let pool;
+    if (b.phase === 1) pool = B.pats;
+    else if (b.phase === 2 || b.nPh < 3) pool = B.pats.concat(B.p2, B.p2);
+    else pool = B.pats.concat(B.p2, B.p3, B.p3, B.p3);
+    // no repito el mismo patron ni el mismo tipo dos veces seguidas, y no pongo otro escudo si ya tiene uno
+    let opts = pool.filter((x) => x !== b.lastDef && x.k !== b.lastK && !(x.k === 'barrier' && b.barrier > 0));
+    if (!opts.length) opts = pool.filter((x) => x !== b.lastDef);
     return G.wpick(opts.map((x) => [x, x.w]));
   }
   function aliveMinions(g, b) { return g.enemies.filter((e) => e.master === b && e.hp > 0).length; }
   const FIRE_COL = '#ff6a6a';
 
+  function spawnMinions(g, b, id, n, elite) {
+    const Df = G.diff();
+    n = Math.max(1, Math.round(n * Df.bossAdds));
+    const room = Math.max(0, 7 - aliveMinions(g, b));
+    for (let i = 0; i < Math.min(n, room); i++) {
+      for (let tries = 0; tries < 6; tries++) {
+        const an = i / n * 6.283 + Math.random() * 1.2, rr = 34 + tries * 8, px = b.x + Math.cos(an) * rr, py = b.y + Math.sin(an) * rr;
+        if (G.collides(g.level, px, py, 5)) continue;
+        const el = elite ? G.pick(Object.keys(G.ELITE_MODS)) : null;
+        const m = G.makeEnemy(id, Math.max(1, b.tier - 1), px, py, el, false);
+        m.state = 'chase'; m.master = b; m.noLoot = true; g.enemies.push(m);
+        G.burst(g, px, py, '#c070ff', 10, 50);
+        break;
+      }
+    }
+    G.sfx('magic');
+  }
+
+  // cambio de etapa: el jefe se vuelve inmune unos segundos, suelta una explosion grande y llama refuerzos
+  function startTransition(g, b) {
+    b.phase++;
+    b.cur = null; b.curK = null; b.alpha = 1; b.beam = 0; b.cn = 0;
+    b.trans = 2.4; b.immune = 2.4; b.cd = 0.8; b.flash = 0.6;
+    b.spd = b.baseSpd * PH_SPD[b.phase - 1];
+    b.barrier = 0;
+    const last = b.phase >= b.nPh;
+    G.toast(g, '¡' + b.name + (last ? ' entra en su forma final!' : ' cambia de etapa!'), last ? '#ff4040' : '#ff7060'); G.sfx('boss'); g.shake = Math.max(g.shake, 7);
+    G.addTele(g, { x: b.x, y: b.y, r: 56, delay: 0.9, dmg: b.dmg * 0.9, col: '#ff4040', src: b, kb: 180, after: { ring: last ? 18 : 12, spd: 90, col: '#ff6a6a', dmg: b.dmg * 0.5 } });
+    if (b.B.padds) spawnMinions(g, b, b.B.padds.id, b.B.padds.n + (last ? 1 : 0), last);
+  }
+
   G.bossAI = function (g, b, dt) {
-    const p = g.p, B = b.B;
+    const p = g.p, B = b.B, Df = G.diff();
     b.anim += dt;
     if (b.flash > 0) b.flash -= dt;
     if (b.contactCd > 0) b.contactCd -= dt;
+    if (b.immune > 0) b.immune -= dt;
     if (b.kx || b.ky) { G.moveEnt(g.level, b, b.kx * dt * 0.25, b.ky * dt * 0.25, false); const f = Math.pow(0.002, dt); b.kx *= f; b.ky *= f; }
     if (!b.active || p.dead) return;
+    // durante la transicion se queda quieto, inmune
+    if (b.trans > 0) { b.trans -= dt; b.flash = 0.05; if (b.trans <= 0) b.immune = Math.max(b.immune, 0); return; }
     if (b.st.stun > 0) return;
     const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
-    if (b.phase === 1 && b.hp < b.hpMax * 0.5) {
-      b.phase = 2; b.cur = null; b.cd = 0.8; b.flash = 0.6; b.spd *= 1.25;
-      G.toast(g, '¡' + b.name + ' entra en furia!', '#ff7060'); G.sfx('boss'); g.shake = Math.max(g.shake, 6);
-      G.addTele(g, { x: b.x, y: b.y, r: 50, delay: 0.6, dmg: b.dmg * 0.8, col: '#ff4040', src: b, kb: 140 });
+    b.fightT += dt;
+    // cambio de etapa por vida
+    const cuts = phaseCuts(b);
+    if (b.phase < b.nPh && b.hp < b.hpMax * cuts[b.phase - 1]) { startTransition(g, b); return; }
+    // enrage suave: si el combate se alarga, el jefe va sumando dano y velocidad
+    if (Df.bossEnrage && b.fightT > 110) {
+      b.enrageT += dt;
+      if (b.enrageT >= 22 && b.enrage < 5) {
+        b.enrageT = 0; b.enrage++;
+        b.dmg = b.baseDmg * (1 + 0.14 * b.enrage);
+        b.spd = b.baseSpd * PH_SPD[b.phase - 1] * (1 + 0.06 * b.enrage);
+        G.toast(g, b.name + ' se enfurece (' + b.enrage + '/5)', '#ff5030'); G.sfx('boss');
+      }
     }
-    const cdMul = b.phase === 2 ? 0.7 : 1;
+    const cdMul = PH_CD[Math.min(b.phase, 3) - 1] * Math.pow(0.94, b.enrage);
     if (!b.cur) {
-      // movimiento de posicionamiento
-      if (d > 120) walkB(g, b, a, 1, dt); else if (d < 60) walkB(g, b, a + Math.PI, 0.6, dt); else walkB(g, b, a + 1.5, 0.35, dt);
+      // posicionamiento: se acerca mas rapido de lo que se aleja, para que no se pueda kitear sin castigo
+      if (d > 110) walkB(g, b, a, b.phase >= 2 ? 1.25 : 1, dt); else if (d < 56) walkB(g, b, a + Math.PI, 0.55, dt); else walkB(g, b, a + 1.5, 0.4, dt);
+      // fuego de hostigamiento: si te quedas lejos disparando, te responde
+      if (b.phase >= 2 && Df.bossHarass > 0 && d > 90) {
+        b.hz -= dt;
+        if (b.hz <= 0) {
+          b.hz = (b.phase >= 3 ? 1.7 : 2.6) / Df.bossHarass;
+          const n = b.phase >= 3 ? 3 : 1;
+          for (let i = 0; i < n; i++) G.eShoot(g, b, a + (i - (n - 1) / 2) * 0.22, 150, 0.6, { col: B.pats[0].col || FIRE_COL, r: 3.5, life: 3 });
+          G.sfx('shoot');
+        }
+      }
       b.cd -= dt;
-      if (b.cd <= 0) { const def = choosePat(b); b.lastDef = def; b.cur = Object.assign({}, def); b.curK = def.k; b.pt = 0; b.ps = 0; b.pa = a; }
+      if (b.cd <= 0) { const def = choosePat(b); b.lastDef = def; b.lastK = def.k; b.cur = Object.assign({}, def); b.curK = def.k; b.pt = 0; b.ps = 0; b.pa = a; b.cn = 0; }
     } else {
       runPattern(g, b, dt, a, d);
     }
-    b.cdNext = B.cd * cdMul;
-    // daño por contacto
-    if (b.contactCd <= 0 && d < b.r + 6 && b.curK !== 'blinkout') {
+    b.cdNext = B.cd * Df.bossCd * cdMul;
+    // dano por contacto
+    if (b.contactCd <= 0 && d < b.r + 6 && b.curK !== 'blinkout' && b.curK !== 'leapair') {
       b.contactCd = 1; G.hurtPlayer(g, b.dmg * 0.7, { src: b, kb: 120, ang: a });
     }
-  };
+  }
   function walkB(g, b, ang, mul, dt) {
     const sp = b.spd * mul * (b.st.slow > 0 ? 0.6 : 1) * dt;
     G.moveEnt(g.level, b, Math.cos(ang) * sp, Math.sin(ang) * sp, false);
     if (Math.abs(Math.cos(ang)) > 0.2) b.face = Math.cos(ang) > 0 ? 1 : -1;
   }
-  function finish(b) { b.cur = null; b.curK = null; b.alpha = 1; b.cd = b.cdNext || b.B.cd; }
+  // al terminar un patron, en etapas avanzadas a veces encadena otro casi sin pausa
+  function finish(b) {
+    b.cur = null; b.curK = null; b.alpha = 1; b.beam = 0;
+    const Df = G.diff();
+    const combo = b.phase >= 2 && Math.random() < Df.bossCombo * (b.phase - 1) * 0.5;
+    b.cd = combo ? 0.25 : (b.cdNext || b.B.cd);
+  }
+  function distSeg(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+    let t = ((px - ax) * vx + (py - ay) * vy) / l2; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
+  }
+  function teleArms(g, b, arms, off, delay, c) {
+    for (let k = 0; k < arms; k++) {
+      const an = off + k / arms * 6.283;
+      for (let i = 0; i < (c.len || 7); i++) G.addTele(g, { x: b.x + Math.cos(an) * (24 + i * (c.step || 20)), y: b.y + Math.sin(an) * (24 + i * (c.step || 20)), r: 12, delay: delay + i * 0.05, dmg: b.dmg * 0.9, col: c.col || '#ff4040', src: b });
+    }
+  }
 
   function runPattern(g, b, dt, a, d) {
     const c = b.cur, p = g.p;
@@ -300,24 +382,14 @@
       }
       case 'summon': {
         if (b.ps === 0) { b.ps = 1; b.flash = 0.5; }
-        if (b.ps === 1 && b.pt > 0.8) {
-          b.ps = 2;
-          const room = Math.max(0, 6 - aliveMinions(g, b));
-          for (let i = 0; i < Math.min(c.n, room); i++) {
-            const an = i / c.n * 6.283 + Math.random(), px = b.x + Math.cos(an) * 34, py = b.y + Math.sin(an) * 34;
-            if (G.collides(g.level, px, py, 5)) continue;
-            const m = G.makeEnemy(c.id, Math.max(1, b.tier - 1), px, py, null, false);
-            m.state = 'chase'; m.master = b; m.noLoot = true; g.enemies.push(m);
-            G.burst(g, px, py, '#c070ff', 10, 50);
-          }
-          G.sfx('magic');
-        }
+        if (b.ps === 1 && b.pt > 0.8) { b.ps = 2; spawnMinions(g, b, c.id, c.n, c.elite); }
         if (b.pt > 1.3) finish(b);
         break;
       }
       case 'charge': {
+        // c.n = cuantas embestidas seguidas (cada una se vuelve a apuntar)
         if (b.ps === 0) { b.ps = 1; b.flash = 0.6; b.cdir = a; }
-        if (b.ps === 1) { b.cdir = a; if (b.pt > 0.7) { b.ps = 2; b.cdt = c.dur; G.sfx('boss'); } }
+        if (b.ps === 1) { b.cdir = a; if (b.pt > (b.cn ? 0.42 : 0.7)) { b.ps = 2; b.cdt = c.dur; G.sfx('boss'); } }
         if (b.ps === 2) {
           b.cdt -= dt;
           const ok = G.moveEnt(g.level, b, Math.cos(b.cdir) * c.spd * dt, Math.sin(b.cdir) * c.spd * dt, false);
@@ -327,7 +399,10 @@
           if (dd < b.r + 6 && b.contactCd <= 0) { b.contactCd = 0.7; G.hurtPlayer(g, b.dmg * 1.2, { src: b, kb: 190, ang: b.cdir }); }
           if (Math.random() < 0.6) g.parts.push({ x: b.x, y: b.y + 4, vx: 0, vy: 0, t: 0, max: 0.3, col: '#ccc', size: 2 });
         }
-        if (b.ps === 3 && b.pt > 0.5) finish(b);
+        if (b.ps === 3 && b.pt > ((c.n || 1) > 1 && b.cn < (c.n || 1) - 1 ? 0.2 : 0.5)) {
+          b.cn++;
+          if (b.cn < (c.n || 1)) { b.ps = 0; b.pt = 0; b.flash = 0.3; } else finish(b);
+        }
         break;
       }
       case 'roots': {
@@ -365,8 +440,110 @@
         if (b.ps === 1) { b.alpha = Math.max(0, 1 - b.pt / 0.35); if (b.pt > 0.35) {
           for (let tries = 0; tries < 12; tries++) { const an = Math.random() * 6.283, px = p.x + Math.cos(an) * G.rand(70, 110), py = p.y + Math.sin(an) * G.rand(70, 110); if (!G.collides(g.level, px, py, b.r)) { G.burst(g, b.x, b.y, '#c070ff', 14, 70); b.x = px; b.y = py; break; } }
           b.ps = 2; b.pt = 0; b.curK = 'blink'; G.burst(g, b.x, b.y, '#c070ff', 14, 70); } }
-        if (b.ps === 2) { b.alpha = Math.min(1, b.pt / 0.3); if (b.pt > 0.45) { b.ps = 3; b.alpha = 1; const aa = G.ang(b.x, b.y, p.x, p.y); for (let i = 0; i < 12; i++) G.eShoot(g, b, aa + i / 12 * 6.283, 100, 0.5, { col: '#d070ff', r: 3, life: 3.5 }); G.sfx('magic'); } }
+        if (b.ps === 2) { b.alpha = Math.min(1, b.pt / 0.3); if (b.pt > 0.45) { b.ps = 3; b.alpha = 1; const aa = G.ang(b.x, b.y, p.x, p.y); const nn = b.phase >= 3 ? 16 : 12; for (let i = 0; i < nn; i++) G.eShoot(g, b, aa + i / nn * 6.283, 100, 0.5, { col: '#d070ff', r: 3, life: 3.5 }); G.sfx('magic'); } }
         if (b.ps === 3 && b.pt > 1.0) { b.alpha = 1; finish(b); }
+        break;
+      }
+      // salto: desaparece, marca donde va a caer (la posicion en que estabas) y aplasta con onda de proyectiles
+      case 'leap': {
+        if (b.ps === 0) { b.ps = 1; b.flash = 0.5; }
+        if (b.ps === 1 && b.pt > 0.5) {
+          b.ps = 2; b.pt = 0; b.curK = 'leapair'; b.alpha = 0; b.lx = p.x; b.ly = p.y;
+          G.addTele(g, { x: b.lx, y: b.ly, r: c.r, delay: 0.85, dmg: b.dmg * 1.5, col: c.col || '#ff4040', src: b, kb: 170, after: c.ring ? { ring: c.ring, spd: 95, col: c.col || FIRE_COL, dmg: b.dmg * 0.55 } : null });
+        }
+        if (b.ps === 2) {
+          b.immune = Math.max(b.immune, 0.1);
+          if (b.pt >= 0.85) {
+            if (!G.collides(g.level, b.lx, b.ly, b.r)) { b.x = b.lx; b.y = b.ly; }
+            b.alpha = 1; b.curK = 'leap'; b.ps = 3; b.pt = 0; g.shake = Math.max(g.shake, 6); G.sfx('boom');
+          }
+        }
+        if (b.ps === 3 && b.pt > 0.45) {
+          b.cn++;
+          if (b.cn < (c.n || 1)) { b.ps = 0; b.pt = 0; b.curK = 'leap'; } else finish(b);
+        }
+        break;
+      }
+      // rayo giratorio: primero una linea fina que te sigue, despues se fija y barre
+      case 'beam': {
+        const arms = c.arms || 1, tel = 0.95, dur = c.dur, L = 300;
+        if (b.ps === 0) { b.ps = 1; b.ba = a; b.bdir = Math.random() < 0.5 ? 1 : -1; b.btick = 0; b.flash = 0.3; b.beam = 1; }
+        if (b.ps === 1) {
+          if (b.pt < tel - 0.3) { let df = G.angDiff(b.ba, a); b.ba += df * Math.min(1, dt * 5); }
+          if (b.pt >= tel) { b.ps = 2; b.pt = 0; b.beam = 2; b.bstart = b.ba; G.sfx('boss'); g.shake = Math.max(g.shake, 3); }
+        }
+        if (b.ps === 2) {
+          const prog = b.pt / dur;
+          b.ba = b.bstart + b.bdir * c.sweep * (prog - 0.35);
+          b.btick -= dt;
+          if (b.btick <= 0) {
+            b.btick = 0.22;
+            for (let k = 0; k < arms; k++) {
+              const an = b.ba + k * 6.283 / arms;
+              if (distSeg(p.x, p.y, b.x, b.y, b.x + Math.cos(an) * L, b.y + Math.sin(an) * L) < 8) G.hurtPlayer(g, b.dmg * 0.85, { src: b, kb: 70, ang: an + 1.57 });
+            }
+          }
+          if (Math.random() < 0.5) for (let k = 0; k < arms; k++) { const an = b.ba + k * 6.283 / arms, r = G.rand(20, 200); g.parts.push({ x: b.x + Math.cos(an) * r, y: b.y + Math.sin(an) * r, vx: 0, vy: -10, t: 0, max: 0.3, col: c.col || '#fff', size: 2 }); }
+          if (prog >= 1) { b.beam = 0; b.ps = 3; b.pt = 0; }
+        }
+        if (b.ps === 3 && b.pt > 0.5) finish(b);
+        break;
+      }
+      // muro de proyectiles con huecos: hay que encontrar el hueco y pasar por ahi
+      case 'wall': {
+        const waves = c.waves || 1, gapT = 0.95;
+        if (b.ps === 0 && b.pt === dt) b.flash = 0.4;
+        if (b.pt >= 0.55 + b.ps * gapT && b.ps < waves) {
+          b.ps++;
+          const aa = G.ang(b.x, b.y, p.x, p.y), cs = Math.cos(aa), sn = Math.sin(aa), px = -sn, py = cs, sp = 9, n = c.n;
+          const lat = ((p.x - b.x) * px + (p.y - b.y) * py) / sp + (n - 1) / 2;
+          const gapStarts = [];
+          for (let k = 0; k < (c.gaps || 1); k++) {
+            const sgn = Math.random() < 0.5 ? -1 : 1, off = sgn * G.rand(3, 6) * (k + 1);
+            gapStarts.push(Math.max(0, Math.min(n - c.gw, Math.round(lat + off - c.gw / 2))));
+          }
+          for (let i = 0; i < n; i++) {
+            if (gapStarts.some((gs) => i >= gs && i < gs + c.gw)) continue;
+            const o = (i - (n - 1) / 2) * sp;
+            G.addProj(g, { x: b.x + cs * 16 + px * o, y: b.y + sn * 16 + py * o, vx: cs * c.spd, vy: sn * c.spd, dmg: b.dmg * 0.6, r: 3.6, life: 4.5, col: c.col || FIRE_COL, from: 'e', src: b });
+          }
+          G.sfx('boom');
+        }
+        if (b.ps >= waves && b.pt > 0.55 + waves * gapT + 0.5) finish(b);
+        break;
+      }
+      // estrella: lineas de explosiones que salen del jefe, y una segunda tanda desfasada entre las primeras
+      case 'star': {
+        const arms = c.arms || 6;
+        if (b.ps === 0) { b.ps = 1; b.sOff = Math.random() * 6.283; b.flash = 0.3; teleArms(g, b, arms, b.sOff, 0.75, c); }
+        if (b.ps === 1 && b.pt > 0.95) { b.ps = 2; teleArms(g, b, arms, b.sOff + 3.1416 / arms, 0.7, c); }
+        if (b.pt > 1.95) finish(b);
+        break;
+      }
+      // vortice: te arrastra hacia el jefe y despues explota
+      case 'vortex': {
+        if (b.ps === 0) { b.ps = 1; b.flash = 0.4; g.fx.push({ k: 'ring', x: b.x, y: b.y, r: 150, t: 0, life: 0.6, col: c.col || '#fff' }); G.sfx('magic'); }
+        if (b.pt > 0.5 && b.pt < c.dur) {
+          if (d > 26 && d < 190) {
+            const pa = G.ang(p.x, p.y, b.x, b.y);
+            G.moveEnt(g.level, p, Math.cos(pa) * c.pull * dt, Math.sin(pa) * c.pull * dt, false);
+          }
+          if (Math.random() < 0.8) { const an = Math.random() * 6.283, rr = G.rand(70, 150); g.parts.push({ x: b.x + Math.cos(an) * rr, y: b.y + Math.sin(an) * rr, vx: -Math.cos(an) * 110, vy: -Math.sin(an) * 110, t: 0, max: 0.5, col: c.col || '#fff', size: 2 }); }
+        }
+        if (b.ps === 1 && b.pt >= c.dur) {
+          b.ps = 2;
+          G.addTele(g, { x: b.x, y: b.y, r: c.r, delay: 0.7, dmg: b.dmg * 1.7, col: c.col || '#ff4040', src: b, kb: 210, after: { ring: c.ring || 10, spd: 95, col: c.col || FIRE_COL, dmg: b.dmg * 0.55 } });
+        }
+        if (b.pt > c.dur + 1.1) finish(b);
+        break;
+      }
+      // escudo: absorbe un porcentaje de la vida maxima antes de poder danarlo
+      case 'barrier': {
+        if (b.ps === 0) {
+          b.ps = 1; b.flash = 0.6; b.barrierMax = b.barrier = b.hpMax * c.pct;
+          G.toast(g, b.name + ' se cubre con un escudo', '#7ad7ff'); G.burst(g, b.x, b.y, '#7ad7ff', 20, 80); G.sfx('magic');
+        }
+        if (b.pt > 1.0) finish(b);
         break;
       }
       default: finish(b);

@@ -97,7 +97,7 @@
   const App = (G.app = {
     slot: -1,
     newWorld(slot, o) {
-      const ws = G.newWorldState(o.name, o.seed, o.hardcore);
+      const ws = G.newWorldState(o.name, o.seed, o.hardcore, o.diff);
       App.start(slot, ws, G.newPlayer(), true);
     },
     continueSlot(slot) {
@@ -112,7 +112,7 @@
       UI.close();
       App.slot = slot;
       const g = { ws, p, slot, level: new G.Level(ws), enemies: [], projs: [], fx: [], parts: [], texts: [], drops: [], npcs: [], bossList: [], boss: null, shake: 0, time: 0, state: 'play', active: new Set(), shops: {},
-        interact: null, hint: '', hintT: 0, biomeName: '', eventT: G.rand(60, 110), dark: 0, amb: [], banner: null, autoT: 20, exploreT: 0, pcx: 1e9, pcy: 1e9, mapT: 0, over: false, aimX: 0, aimY: 0, cam: { x: 0, y: 0 }, dmgVignette: 0, pendingReward: null, lastBiome: '' };
+        interact: null, hint: '', hintT: 0, biomeName: '', eventT: G.rand(60, 110) * G.diffOf(ws).event, dark: 0, amb: [], banner: null, autoT: 20, exploreT: 0, pcx: 1e9, pcy: 1e9, mapT: 0, over: false, aimX: 0, aimY: 0, cam: { x: 0, y: 0 }, dmgVignette: 0, pendingReward: null, lastBiome: '' };
       G.game = g;
       initRuntime(p);
       if (p.hp == null || p.hp <= 0) p.hp = p.hpMax;
@@ -359,7 +359,7 @@
     const ring = (n, r, fn) => { let c = 0; for (let i = 0; i < n * 3 && c < n; i++) { const a = Math.random() * 6.283, x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (G.collides(L, x, y, 6)) continue; fn(x, y); c++; } };
     if (kind === 'ambush') {
       UI.toast('¡Emboscada! Los enemigos te rodean', '#ff6a3a'); G.sfx('boss');
-      ring(3 + Math.min(4, tier), 120, (x, y) => { const e = G.makeEnemy(G.pick(pool), tier, x, y, G.chance(0.12) ? G.pick(Object.keys(G.ELITE_MODS)) : null); e.state = 'chase'; e.noLoot = false; g.enemies.push(e); G.burst(g, x, y, '#ff6a3a', 8, 50); });
+      ring(Math.max(2, Math.round((3 + Math.min(4, tier)) * G.diffOf(g.ws).eventSize)), 120, (x, y) => { const e = G.makeEnemy(G.pick(pool), tier, x, y, G.chance(0.12) ? G.pick(Object.keys(G.ELITE_MODS)) : null); e.state = 'chase'; e.noLoot = false; g.enemies.push(e); G.burst(g, x, y, '#ff6a3a', 8, 50); });
     } else if (kind === 'thief') {
       UI.toast('Un goblin ladrón merodea con un botín…', '#c9a63a');
       ring(1, 150, (x, y) => { const e = G.makeEnemy('thief', tier, x, y, null); e.hp *= 1.2; g.enemies.push(e); });
@@ -484,7 +484,7 @@
       for (const q of ch.pois) if (q.k === 'spring' && G.dist(p.x, p.y, q.tx * TS + 8, q.ty * TS + 8) < 56 && p.hp < p.hpMax) { p.hp = Math.min(p.hpMax, p.hp + 6); p.stat.poison = p.stat.burn = 0; g.parts.push({ x: p.x, y: p.y, vx: 0, vy: -20, t: 0, max: 0.6, col: '#7aff9a', size: 2 }); }
     }
     // eventos
-    if (!g.boss && !p.dead) { g.eventT -= dt; if (g.eventT <= 0) { g.eventT = G.rand(75, 150); const camp = L.chunk(g.pcx, g.pcy).kind === 'camp'; if (!camp) randomEvent(g); } }
+    if (!g.boss && !p.dead) { g.eventT -= dt; if (g.eventT <= 0) { g.eventT = G.rand(75, 150) * G.diffOf(g.ws).event; const camp = L.chunk(g.pcx, g.pcy).kind === 'camp'; if (!camp) randomEvent(g); } }
     // autoguardado
     g.autoT -= dt;
     if (g.autoT <= 0) { g.autoT = 20; if (!g.boss) App.saveNow(); }
@@ -675,6 +675,16 @@
       ctx.fillStyle = '#000'; ctx.fillRect(bx - 1, by - 1, w + 2, 4); ctx.fillStyle = '#c02a2a'; ctx.fillRect(bx, by, Math.max(0, w * e.hp / e.hpMax), 2);
     }
     if (e.elite) { ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; const nm = G.ELITE_MODS[e.elite].n + ' ' + e.D.name; const ny = Math.round(feet - info.h - 2); ctx.fillStyle = '#000'; ctx.fillText(nm, sx + 1, ny + 1); ctx.fillStyle = G.ELITE_MODS[e.elite].col; ctx.fillText(nm, sx, ny); }
+    if (e.boss && e.barrier > 0) { ctx.globalAlpha = 0.35 + Math.sin(time * 7) * 0.12; ctx.strokeStyle = '#7ad7ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, e.r * 1.7, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 0.12; ctx.fillStyle = '#7ad7ff'; ctx.fill(); ctx.globalAlpha = 1; }
+    if (e.boss && e.immune > 0 && e.alpha > 0) { ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(sx, sy, e.r * 1.5, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+    if (e.boss && e.active && e.beam) {
+      const arms = (e.cur && e.cur.arms) || 1, col = (e.cur && e.cur.col) || '#ff4040';
+      for (let k = 0; k < arms; k++) {
+        const an = e.ba + k * 6.283 / arms, ex = sx + Math.cos(an) * 300, ey = sy + Math.sin(an) * 300;
+        if (e.beam === 1) { ctx.strokeStyle = 'rgba(255,60,60,0.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); }
+        else { ctx.globalAlpha = 0.45; ctx.strokeStyle = col; ctx.lineWidth = 13; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke(); }
+      }
+    }
     // indicador de carga del jefe
     if (e.boss && e.active && e.curK === 'charge' && e.ps === 1) { ctx.strokeStyle = 'rgba(255,60,60,0.6)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(e.cdir) * 140, sy + Math.sin(e.cdir) * 140); ctx.stroke(); }
   }
