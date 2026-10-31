@@ -228,7 +228,8 @@ const ok = (name, cond, extra) => { results.push([cond ? 'OK  ' : 'FALLA', name,
   ok('El jefe ataca (proyectiles/efectos) y el HUD lo muestra', await ev(() => !document.getElementById('boss-bar').classList.contains('hidden')));
   await ev(() => { const g = G.game; g.boss.hp = 3; g.boss.x = g.p.x + 12; g.boss.y = g.p.y; });
   await page.mouse.move(640 + 20, 360); await page.mouse.down(); await wait(1500); await page.mouse.up();
-  await ev(() => { const g = G.game; if (g.boss) { G.damageEnemy(g, g.boss, 1e6, {}); } });
+  // el jefe ahora tiene etapas: al bajar de vida cambia de etapa y queda inmune unos segundos, asi que hay que insistir hasta que muera
+  for (let i = 0; i < 40; i++) { const alive = await ev(() => { const g = G.game; if (g.boss && !g.boss.dead) { G.damageEnemy(g, g.boss, 1e6, {}); return true; } return false; }); if (!alive) break; await wait(400); }
   await wait(3500);
   const rew = await ev(() => ({ ui: G.ui.current(), gain: G.game.p.pts - window.__pts0, d: G.game.ws.stats.bosses, drops: window.__drops }));
   ok('Jefe derrotado: recompensa de puntos y botín', rew.ui === 'reward' && rew.gain >= 3 && rew.d === 1 && rew.drops >= 10, JSON.stringify(rew));
